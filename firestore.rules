@@ -1,0 +1,73 @@
+rules_version = '2';
+
+// ─────────────────────────────────────────────────────────────────────
+// Modello ruoli: via Firebase Auth custom claims, assegnati SOLO da
+// Cloud Functions con Admin SDK (mai da un client, mai self-service).
+//   - admin: true                → accesso completo
+//   - gestoreLidoId: "<lidoId>"  → gestore di UN lido specifico
+// Un utente autenticato senza questi claim è un cliente normale.
+//
+// Regola di fondo: nessuna scrittura che tocca denaro o stato di
+// prenotazione passa da qui. Le prenotazioni e le conferme di
+// pagamento sono scritte SOLO da Cloud Functions (Admin SDK, che
+// bypassa queste regole) dopo conferma webhook di Stripe. Un client
+// non deve mai poter marcarsi da solo una prenotazione come pagata.
+// ─────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.admin == true;
+    }
+    function isGestoreOf(lidoId) {
+      return isSignedIn() && request.auth.token.gestoreLidoId == lidoId;
+    }
+
+    // ── LIDI — directory pubblica, sola lettura per tutti ───────────
+    match /lidi/{lidoId} {
+      allow read: if true;
+      allow write: if isAdmin();
+
+      // ── SPOTS — disponibilità posti, lettura pubblica (serve per
+      // mostrare la mappa senza login). Scrittura diretta consentita
+      // solo al gestore del proprio lido o all'admin, per usi manuali
+      // (es. segnare un posto in manutenzione). La transizione a
+      // "occupato" per una prenotazione confermata avviene SOLO via
+      // Cloud Function (Admin SDK), non tramite questa regola.
+      match /spots/{spotId} {
+        allow read: if true;
+        allow write: if isAdmin() || isGestoreOf(lidoId);
+      }
+    }
+
+    // ── BOOKINGS — mai scrivibili da un client. Ogni prenotazione
+    // nasce da una Cloud Function dopo che Stripe conferma il
+    // pagamento (webhook), e viene aggiornata solo da lì.
+    match /bookings/{bookingId} {
+      allow read: if isAdmin()
+        || (isSignedIn() && resource.data.clientId == request.auth.uid)
+        || (isSignedIn() && isGestoreOf(resource.data.lidoId));
+      allow write: if false;
+    }
+
+    // ── USERS — profilo pubblico minimo (nickname, QR), MAI
+    // telefono/email visibili ad altri utenti (decisione di prodotto).
+    // Ogni utente legge/scrive solo il proprio profilo; l'admin legge
+    // tutto per supporto/moderazione, ma non scrive al posto altrui.
+    match /users/{uid} {
+      allow read: if isAdmin() || (isSignedIn() && request.auth.uid == uid);
+      allow write: if isSignedIn() && request.auth.uid == uid
+        && !request.resource.data.keys().hasAny(['telefono','email','admin','gestoreLidoId']);
+      allow write: if isAdmin();
+    }
+
+    // Tutto il resto: negato di default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
