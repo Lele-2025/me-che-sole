@@ -83,16 +83,18 @@ functions/                    → Cloud Functions (Node 20, region europe-west1)
 
 **`Mappa` legge sempre spot da Firestore via `useLido`**, sia nel wizard di prenotazione cliente sia nel pannello gestore — l'unica eccezione è `AdminPanel`, che genera ancora la propria griglia con `generateSpots()` per uno pseudo-cruscotto non collegato a nessun lido reale. Se cambi il modello di disponibilità dei posti (nuovo stato oltre free/reserved/occupied, nuovi campi), aggiorna `firestore.rules`, `functions/checkout.js`, `functions/webhook.js`, `scripts/seedLidi.mjs` e `useLido.js` insieme.
 
+**Redesign "Lido Minimal" in corso, non ancora completo.** `theme.js` contiene ORA due palette in parallelo: quella originale "Costa Garganica" (`C.sea1/sea2/sun/aqua/cream/deep/navy/coral/muted`, font Cormorant Garamond+DM Sans) ancora usata da `WizardPrenotazione`, `DettaglioLido`, `Mappa`, `StaffLoginModal`, `Splash`, e i pannelli gestore/admin in `App.jsx`; e quella nuova (`C.white/sabbia/maiolica/maiolicaDark/terracotta/ink/inkMuted/line`, font Manrope+DM Mono, più `maiolicaPattern` per i dettagli decorativi) già applicata a `Home.jsx`, `CardLido.jsx`, `Logo.jsx`. Finché il redesign non è completo, non rimuovere i token della vecchia palette — servono ancora. Il pulsante di CardLido dice "Prenota" (non più "Richiedi": quella dicitura era per il vecchio modello a richiesta assistita, superato dalla decisione booking-diretto).
+
 ## Prossimi passi tecnici (in ordine — vedi anche la task list)
 
 1. ~~Rimuovere `DEMO_USERS` e il backdoor admin~~ — fatto.
 2. ~~Scaffold Cloud Functions Stripe Connect~~ — fatto, non ancora deployato.
 3. ~~Sostituire `ModalPagamento` con Stripe Checkout reale~~ — fatto lato codice.
 4. ~~Collegare Mappa/WizardPrenotazione/Gestore a Firestore in tempo reale~~ — fatto (`useLido.js`), `AdminPanel` escluso di proposito (vedi sopra).
-5. **Deploy**: `firebase login` (di chi ha accesso al progetto) → `firebase functions:secrets:set STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` → `node scripts/seedLidi.mjs` (popola Firestore) → `firebase deploy --only functions,firestore:rules` → registrare l'URL di `stripeWebhook` su Stripe Dashboard (Sviluppatori → Webhook). Solo dopo questo passo il flusso di pagamento è testabile end-to-end.
-6. **Onboarding gestori**: UI nel pannello gestore che chiama `createConnectOnboardingLink` e mostra un lido come "pagamenti non ancora attivi" finché `stripeOnboardingComplete` non è vero.
-7. **AdminPanel reale**: cruscotto multi-lido con dati veri (richiede una collectionGroup query su `spots` e una query su `bookings`, non affrontato in questo giro).
-8. **Audit dei 47 lidi**: verificare che contatti/dati siano ancora corretti (il progetto era fermo da tempo).
-9. Redesign UI (direzione "Lido Minimal": bianco/sabbia/blu maiolica/terracotta, tipografia Manrope+DM Mono, pattern maiolica pugliese come dettaglio, non sfondo) — da fare dopo che booking+pagamento reali funzionano, non prima.
+5. ~~Onboarding gestori~~ — fatto: banner nel pannello gestore che chiama `createConnectOnboardingLink`, mostra "pagamenti non ancora attivi" finché `stripeOnboardingComplete` non è vero.
+6. **Deploy**: `firebase login` (di chi ha accesso al progetto) → `firebase functions:secrets:set STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` → `node scripts/seedLidi.mjs` (popola Firestore) → `firebase deploy --only functions,firestore:rules` → registrare l'URL di `stripeWebhook` su Stripe Dashboard (Sviluppatori → Webhook). Solo dopo questo passo il flusso di pagamento è testabile end-to-end.
+7. **Redesign "Lido Minimal" — completare la propagazione**: `WizardPrenotazione`, `DettaglioLido`, `Mappa`/`OmbrelloneReal`/`SunCompass`, `StaffLoginModal`, `Splash`, pannelli gestore/admin in `App.jsx`. Solo dopo, rimuovere i token della vecchia palette da `theme.js`.
+8. **AdminPanel reale**: cruscotto multi-lido con dati veri (richiede una collectionGroup query su `spots` e una query su `bookings`, non affrontato in questo giro).
+9. **Audit dei 47 lidi**: verificare che contatti/dati siano ancora corretti (il progetto era fermo da tempo).
 
 Confermare `PLATFORM_FEE_PERCENT` in `functions/checkout.js` prima del deploy in produzione (vedi sopra).

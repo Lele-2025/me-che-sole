@@ -14,6 +14,7 @@ import { WizardPrenotazione } from "./screens/WizardPrenotazione.jsx";
 import { AdminPanel } from "./screens/AdminPanel.jsx";
 
 const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
+const createConnectOnboardingLink = httpsCallable(functions, "createConnectOnboardingLink");
 
 // ─── APP PRINCIPALE ──────────────────────────────────────────────────
 export default function App() {
@@ -28,6 +29,8 @@ export default function App() {
   const [bookingLoading,setBookingLoading]=useState(false);
   const [bookingErr,setBookingErr]=useState("");
   const [successMsg,setSuccessMsg]=useState("");
+  const [onboardingLoading,setOnboardingLoading]=useState(false);
+  const [onboardingErr,setOnboardingErr]=useState("");
 
   // Un solo hook per entrambi gli usi (cliente in fase di prenotazione,
   // gestore nel proprio pannello): solo una delle due schermate è
@@ -108,6 +111,21 @@ export default function App() {
     }
   };
 
+  // Genera il link di onboarding Stripe Connect per il lido del
+  // gestore e ci reindirizza — nessun dato bancario passa da noi,
+  // tutta la verifica (KYC, IBAN) avviene lato Stripe.
+  const handleOnboarding=async()=>{
+    setOnboardingErr("");
+    setOnboardingLoading(true);
+    try{
+      const res=await createConnectOnboardingLink({lidoId:staffLidoId});
+      window.location.href=res.data.url;
+    }catch(e){
+      setOnboardingErr(e.message||"Impossibile avviare l'attivazione dei pagamenti.");
+      setOnboardingLoading(false);
+    }
+  };
+
   if(screen==="splash") return <Splash onDone={()=>setScreen("home")}/>;
   if(screen==="admin") return <AdminPanel onExit={handleStaffLogout}/>;
   if(screen==="dettaglio"&&lidoDettaglio) return <DettaglioLido lido={lidoDettaglio} onBack={()=>setScreen("home")} onPrenota={l=>{setLidoSel(l);setScreen("prenota");}}/>;
@@ -130,6 +148,24 @@ export default function App() {
       </nav>
       <div style={{maxWidth:980,margin:"0 auto",padding:"1.5rem clamp(0.8rem,4vw,2rem) 4rem"}}>
         <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"1.4rem",fontWeight:700,color:"#003A58",marginBottom:"1rem"}}>Pannello gestore — {activeLido?.nome||"Caricamento…"}</div>
+        {activeLido&&!activeLido.stripeOnboardingComplete&&(
+          <div style={{background:"#FFF8EE",border:"1.5px solid rgba(244,196,48,0.4)",borderRadius:16,padding:"1.1rem 1.3rem",marginBottom:"1.2rem",display:"flex",alignItems:"center",gap:"1rem",flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:220}}>
+              <div style={{fontWeight:800,color:"#5A4010",fontSize:"0.92rem",marginBottom:"0.2rem"}}>⚠️ Pagamenti online non ancora attivi</div>
+              <div style={{fontSize:"0.78rem",color:"#7A5820"}}>Finché non completi l'attivazione, il tuo lido non può ricevere prenotazioni a pagamento.</div>
+              {onboardingErr&&<div style={{fontSize:"0.78rem",color:"#C04010",marginTop:"0.4rem",fontWeight:600}}>{onboardingErr}</div>}
+            </div>
+            <button onClick={handleOnboarding} disabled={onboardingLoading}
+              style={{background:onboardingLoading?"rgba(0,0,0,0.15)":"linear-gradient(135deg,#F4C430,#D9A400)",color:"#3A2A00",border:"none",borderRadius:50,padding:"0.7rem 1.3rem",fontSize:"0.85rem",fontWeight:800,cursor:onboardingLoading?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+              {onboardingLoading?"Attendere…":"Attiva i pagamenti →"}
+            </button>
+          </div>
+        )}
+        {activeLido?.stripeOnboardingComplete&&(
+          <div style={{display:"inline-flex",alignItems:"center",gap:6,background:"rgba(39,174,96,0.1)",border:"1.5px solid rgba(39,174,96,0.3)",borderRadius:50,padding:"0.35rem 0.9rem",marginBottom:"1.2rem",fontSize:"0.78rem",fontWeight:700,color:"#1A8A4A"}}>
+            ✓ Pagamenti attivi
+          </div>
+        )}
         {spotsLoading?(
           <div style={{textAlign:"center",padding:"2rem",color:"#6ABBC8",fontSize:"0.85rem"}}>Caricamento posti…</div>
         ):(
