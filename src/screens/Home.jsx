@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { C, css, maiolicaPattern } from "../theme.js";
+import { C, css, brandPattern } from "../theme.js";
 import { LIDI, CITTA } from "../data/lidi.js";
 import { Logo } from "../components/Logo.jsx";
 import { CardLido } from "../components/CardLido.jsx";
@@ -22,12 +22,12 @@ export function Home({onDettaglio,onGestore}) {
       <style>{css}</style>
       <nav style={{position:"sticky",top:0,zIndex:50,background:"rgba(245,242,236,0.95)",backdropFilter:"blur(14px)",borderBottom:"1px solid "+C.line,padding:"0.7rem 1.2rem",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <Logo h={32}/>
-        <button onClick={onGestore} style={{background:C.maiolica,color:C.white,border:"none",borderRadius:10,padding:"0.5rem 1.1rem",fontSize:"0.8rem",fontWeight:700,cursor:"pointer"}}>Area Gestore</button>
+        <button onClick={onGestore} style={{background:C.brandNavy,color:C.white,border:"none",borderRadius:10,padding:"0.5rem 1.1rem",fontSize:"0.8rem",fontWeight:700,cursor:"pointer"}}>Area Gestore</button>
       </nav>
       <div style={{textAlign:"center",padding:"clamp(2rem,5vw,3.5rem) 1.2rem 1.5rem",maxWidth:640,margin:"0 auto"}}>
         <div style={{animation:"float 4s ease-in-out infinite",display:"inline-block",marginBottom:"1rem"}}><Logo h={90}/></div>
         <h1 style={{fontFamily:"'Manrope',sans-serif",fontSize:"clamp(2rem,6vw,2.7rem)",fontWeight:800,color:C.ink,lineHeight:1.15,marginBottom:"0.6rem"}}>
-          Prenota il tuo <span style={{color:C.maiolica}}>ombrellone</span>
+          Prenota il tuo <span style={{color:C.brandNavy}}>ombrellone</span>
         </h1>
         <p style={{fontSize:"clamp(0.9rem,2.5vw,1rem)",color:C.inkMuted,lineHeight:1.7,marginBottom:"1.8rem"}}>
           Scegli il lido, vedi la mappa con le <strong style={{color:C.ink}}>ombre reali</strong> al tuo orario.
@@ -39,15 +39,15 @@ export function Home({onDettaglio,onGestore}) {
               onChange={e=>{setSearch(e.target.value);setCittaSel("");}}
               onKeyDown={e=>e.key==="Enter"&&cerca()}
               style={{flex:1,padding:"0.85rem 1rem",borderRadius:10,fontSize:"0.95rem",border:"1.5px solid "+C.line,outline:"none",color:C.ink,background:C.white,fontFamily:"'Manrope',sans-serif"}}/>
-            <button onClick={()=>cerca()} style={{background:C.maiolica,color:C.white,border:"none",borderRadius:10,padding:"0 1.2rem",fontSize:"0.95rem",fontWeight:700,cursor:"pointer"}}>Cerca</button>
+            <button onClick={()=>cerca()} style={{background:C.brandNavy,color:C.white,border:"none",borderRadius:10,padding:"0 1.2rem",fontSize:"0.95rem",fontWeight:700,cursor:"pointer"}}>Cerca</button>
           </div>
           <div style={{fontSize:"0.75rem",fontWeight:700,color:C.inkMuted,marginBottom:"0.5rem",textAlign:"left"}}>Oppure scegli la zona:</div>
           <div style={{display:"flex",gap:"0.4rem",flexWrap:"wrap"}}>
             {CITTA.map(c=>(
               <button key={c} onClick={()=>{setCittaSel(c===cittaSel?"":c);cerca(c===cittaSel?"":c);}}
                 style={{padding:"0.4rem 0.9rem",borderRadius:8,border:"1.5px solid",cursor:"pointer",fontSize:"0.78rem",fontWeight:700,transition:"all .15s",
-                  borderColor:cittaSel===c?C.maiolica:C.line,
-                  background:cittaSel===c?C.maiolica:C.white,
+                  borderColor:cittaSel===c?C.brandNavy:C.line,
+                  background:cittaSel===c?C.brandNavy:C.white,
                   color:cittaSel===c?C.white:C.ink}}>{c}</button>
             ))}
           </div>
@@ -71,7 +71,7 @@ export function Home({onDettaglio,onGestore}) {
               {n:"2",t:"Scegli il posto",d:"Mappa con ombre reali al tuo orario"},
               {n:"3",t:"Paga e vai",d:"Conferma online e ricevi il QR code"}].map(f=>(
               <div key={f.t} style={{background:C.white,borderRadius:14,padding:"1.3rem",border:"1px solid "+C.line,textAlign:"center"}}>
-                <div style={{width:40,height:40,borderRadius:10,background:C.maiolica,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 0.8rem"}}>
+                <div style={{width:40,height:40,borderRadius:10,background:C.brandNavy,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 0.8rem"}}>
                   <span style={{fontFamily:"'DM Mono',monospace",fontSize:"1.05rem",fontWeight:500,color:C.white}}>{f.n}</span>
                 </div>
                 <div style={{fontWeight:700,color:C.ink,fontSize:"0.95rem",marginBottom:"0.35rem"}}>{f.t}</div>
@@ -81,7 +81,7 @@ export function Home({onDettaglio,onGestore}) {
           </div>
           <div style={{display:"flex",alignItems:"center",gap:"0.7rem",marginBottom:"1rem"}}>
             <div style={{fontFamily:"'Manrope',sans-serif",fontSize:"1.2rem",fontWeight:800,color:C.ink}}>I migliori lidi del Gargano</div>
-            <div style={{flex:1,height:5,backgroundImage:maiolicaPattern,backgroundSize:"40px 40px",borderRadius:3}}/>
+            <div style={{flex:1,height:5,backgroundImage:brandPattern,backgroundSize:"40px 40px",borderRadius:3}}/>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(min(100%,270px),1fr))",gap:"1.1rem"}}>
             {LIDI.filter(l=>l.stelle===5).slice(0,6).map(l=><CardLido key={l.id} l={l} onDettaglio={onDettaglio}/>)}
@@ -89,7 +89,7 @@ export function Home({onDettaglio,onGestore}) {
         </div>
       )}
       <div style={{textAlign:"center",paddingBottom:"2rem"}}>
-        <span style={{fontSize:"0.65rem",color:C.inkMuted,userSelect:"none"}}>© 2025 Me che sole</span>
+        <span style={{fontSize:"0.65rem",color:C.inkMuted,userSelect:"none"}}>© 2025 lettino</span>
       </div>
     </div>
   );
