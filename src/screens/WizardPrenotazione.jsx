@@ -3,7 +3,7 @@ import { C, css } from "../theme.js";
 import { Mappa } from "../components/Mappa.jsx";
 
 // ─── WIZARD PRENOTAZIONE ────────────────────────────────────────────
-export function WizardPrenotazione({lidoSel,spots,bookings,onBook,onBack}) {
+export function WizardPrenotazione({lidoSel,spots,bookings,onBook,onBack,bookingLoading,bookingErr}) {
   const [passo,setPasso]=useState(1);
   const [dateStart,setDateStart]=useState("");
   const [dateEnd,setDateEnd]=useState("");
@@ -128,9 +128,11 @@ export function WizardPrenotazione({lidoSel,spots,bookings,onBook,onBack}) {
                 </div>
               </div>
             </div>
-            <button onClick={()=>onBook({spot:selected,dateStart,dateEnd:dateEnd||dateStart,ora,imp,total,days})}
-              style={{width:"100%",padding:"1.1rem",borderRadius:50,border:"none",background:"linear-gradient(135deg,#27AE60,#1A8A4A)",color:"white",fontSize:"1rem",fontWeight:800,cursor:"pointer",boxShadow:"0 6px 20px rgba(39,174,96,0.45)",marginBottom:"0.6rem"}}>
-              💳 Paga €{total} — Conferma prenotazione
+            {bookingErr&&<div style={{background:"rgba(255,107,53,0.1)",border:"1.5px solid rgba(255,107,53,0.3)",borderRadius:14,padding:"0.8rem 1rem",marginBottom:"0.9rem",fontSize:"0.82rem",color:C.coral,fontWeight:600}}>{bookingErr}</div>}
+            <button onClick={()=>!bookingLoading&&onBook({spot:selected,dateStart,dateEnd:dateEnd||dateStart,ora,imp,total,days})}
+              disabled={bookingLoading}
+              style={{width:"100%",padding:"1.1rem",borderRadius:50,border:"none",background:bookingLoading?"rgba(0,0,0,0.15)":"linear-gradient(135deg,#27AE60,#1A8A4A)",color:"white",fontSize:"1rem",fontWeight:800,cursor:bookingLoading?"not-allowed":"pointer",boxShadow:bookingLoading?"none":"0 6px 20px rgba(39,174,96,0.45)",marginBottom:"0.6rem"}}>
+              {bookingLoading?"Reindirizzamento al pagamento…":`💳 Paga €${total} — Conferma prenotazione`}
             </button>
             <BtnI onClick={()=>setPasso(2)}/>
           </div>

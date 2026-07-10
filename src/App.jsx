@@ -1,17 +1,19 @@
-import { useState } from "react";
-import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { auth } from "./firebase.js";
+import { useState, useEffect } from "react";
+import { signInWithEmailAndPassword, signInAnonymously, signOut } from "firebase/auth";
+import { httpsCallable } from "firebase/functions";
+import { auth, functions } from "./firebase.js";
 import { css } from "./theme.js";
 import { generateSpots } from "./data/spots.js";
 import { Splash } from "./components/Splash.jsx";
 import { Logo } from "./components/Logo.jsx";
 import { StaffLoginModal } from "./components/StaffLoginModal.jsx";
-import { ModalPagamento } from "./components/ModalPagamento.jsx";
 import { Mappa } from "./components/Mappa.jsx";
 import { Home } from "./screens/Home.jsx";
 import { DettaglioLido } from "./screens/DettaglioLido.jsx";
 import { WizardPrenotazione } from "./screens/WizardPrenotazione.jsx";
 import { AdminPanel } from "./screens/AdminPanel.jsx";
+
+const createCheckoutSession = httpsCallable(functions, "createCheckoutSession");
 
 // ─── APP PRINCIPALE ──────────────────────────────────────────────────
 export default function App() {
@@ -31,9 +33,34 @@ export default function App() {
     {spotId:"S-A2",client:"Elena C.",date:"2025-07-14",arrivalTime:"08:30",price:32,tipo:"Con Imprevisti"},
   ]);
   const [selected,setSelected]=useState(null);
-  const [showPayment,setShowPayment]=useState(false);
-  const [prenotazionePending,setPrenotazionePending]=useState(null);
+  const [bookingLoading,setBookingLoading]=useState(false);
+  const [bookingErr,setBookingErr]=useState("");
   const [successMsg,setSuccessMsg]=useState("");
+
+  // Un cliente non ha (ancora) un account vero: lo autentichiamo in modo
+  // anonimo così una prenotazione ha comunque un uid stabile a cui
+  // agganciarsi (richiesto da createCheckoutSession e da firestore.rules),
+  // senza imporre una schermata di registrazione che non esiste ancora.
+  useEffect(()=>{
+    if(!auth.currentUser) signInAnonymously(auth).catch(()=>{});
+  },[]);
+
+  // Ritorno da Stripe Checkout: l'app è una SPA senza router, quindi
+  // success_url/cancel_url (vedi functions/checkout.js) puntano alla
+  // root con dei query param invece che a pagine dedicate.
+  useEffect(()=>{
+    const params=new URLSearchParams(window.location.search);
+    const esito=params.get("esito");
+    if(esito==="confermata"){
+      setSuccessMsg("Pagamento ricevuto! La prenotazione è confermata, QR code via email.");
+      setTimeout(()=>setSuccessMsg(""),6000);
+    }else if(esito==="annullata"){
+      setBookingErr("Pagamento annullato: il posto è stato rilasciato.");
+    }
+    if(esito){
+      window.history.replaceState(null,"",window.location.pathname);
+    }
+  },[]);
 
   // Login staff (gestore o admin): il ruolo è deciso dai custom claim
   // sul token Firebase Auth, assegnati solo via scripts/setStaffClaim.mjs
@@ -53,26 +80,38 @@ export default function App() {
       setStaffLoading(false);
     }
   };
-  const handleStaffLogout=async()=>{ await signOut(auth); setScreen("home"); };
+  const handleStaffLogout=async()=>{
+    await signOut(auth);
+    await signInAnonymously(auth).catch(()=>{});
+    setScreen("home");
+  };
 
-  const handleBook=(pren)=>{setPrenotazionePending(pren);setShowPayment(true);};
-  const handleConferma=()=>{
-    if(!prenotazionePending) return;
-    const {spot,dateStart,dateEnd,ora,imp,total}=prenotazionePending;
-    setBookings(b=>[...b,{spotId:spot.id,client:"Cliente",date:dateStart+(dateEnd&&dateEnd!==dateStart?" > "+dateEnd:""),arrivalTime:ora,price:total,tipo:imp?"Con Imprevisti":"Standard"}]);
-    setSuccessMsg("Prenotato "+spot.id+" per il "+dateStart+" ore "+ora+"! QR code via email.");
-    setSelected(null);setShowPayment(false);setPrenotazionePending(null);
-    setTimeout(()=>setSuccessMsg(""),6000);
+  // Crea la Checkout Session lato server e reindirizza a Stripe
+  // (hosted, il numero di carta non passa mai dal nostro frontend) —
+  // sostituisce il vecchio ModalPagamento che simulava un addebito.
+  const handleBook=async(pren)=>{
+    setBookingErr("");
+    setBookingLoading(true);
+    try{
+      const {spot,dateStart,dateEnd,ora,imp,total}=pren;
+      const res=await createCheckoutSession({
+        lidoId:lidoSel.id, spotId:spot.id,
+        dateStart, dateEnd, ora, imp,
+        totalCents:Math.round(total*100),
+      });
+      window.location.href=res.data.url;
+    }catch(e){
+      setBookingErr(e.message==="internal"?"Errore imprevisto, riprova.":e.message||"Impossibile avviare il pagamento.");
+      setBookingLoading(false);
+    }
   };
 
   if(screen==="splash") return <Splash onDone={()=>setScreen("home")}/>;
   if(screen==="admin") return <AdminPanel onExit={handleStaffLogout}/>;
   if(screen==="dettaglio"&&lidoDettaglio) return <DettaglioLido lido={lidoDettaglio} onBack={()=>setScreen("home")} onPrenota={l=>{setLidoSel(l);setScreen("prenota");}}/>;
   if(screen==="prenota"&&lidoSel) return (
-    <>
-      <WizardPrenotazione lidoSel={lidoSel} spots={spots} bookings={bookings} onBack={()=>setScreen("dettaglio")} onBook={handleBook}/>
-      {showPayment&&prenotazionePending&&<ModalPagamento prenotazione={prenotazionePending} onConferma={handleConferma} onChiudi={()=>{setShowPayment(false);setPrenotazionePending(null);}}/>}
-    </>
+    <WizardPrenotazione lidoSel={lidoSel} spots={spots} bookings={bookings} onBack={()=>setScreen("dettaglio")}
+      onBook={handleBook} bookingLoading={bookingLoading} bookingErr={bookingErr}/>
   );
 
   // ── GESTORE PANEL ──────────────────────────────────────────────────
@@ -102,6 +141,7 @@ export default function App() {
     <>
       <style>{css}</style>
       {successMsg&&<div style={{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#27AE60,#1A8A4A)",color:"white",borderRadius:50,padding:"0.7rem 1.4rem",fontSize:"0.85rem",fontWeight:700,zIndex:200,boxShadow:"0 4px 20px rgba(39,174,96,0.5)",maxWidth:"90vw",textAlign:"center",whiteSpace:"nowrap"}}>{successMsg}</div>}
+      {bookingErr&&<div style={{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#FF6B35,#C04010)",color:"white",borderRadius:50,padding:"0.7rem 1.4rem",fontSize:"0.85rem",fontWeight:700,zIndex:200,boxShadow:"0 4px 20px rgba(255,107,53,0.5)",maxWidth:"90vw",textAlign:"center"}}>{bookingErr}</div>}
       <Home onDettaglio={l=>{setLidoDettaglio(l);setScreen("dettaglio");}} onGestore={()=>setStaffModal(true)}/>
       {staffModal&&<StaffLoginModal onLogin={handleStaffLogin} onClose={()=>{setStaffModal(false);setStaffErr("");}} err={staffErr} loading={staffLoading}/>}
     </>

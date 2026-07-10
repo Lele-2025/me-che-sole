@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 // Analytics volutamente non inizializzato: raccoglie dati di
 // comportamento utente e richiede un banner di consenso cookie/GDPR
@@ -19,3 +20,6 @@ const firebaseConfig = {
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
+// Stessa regione delle Cloud Functions (functions/index.js) — un
+// mismatch qui fa fallire silenziosamente le chiamate callable.
+export const functions = getFunctions(app, "europe-west1");

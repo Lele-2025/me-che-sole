@@ -68,8 +68,11 @@ exports.createCheckoutSession = onCall(
         transfer_data: { destination: stripeAccountId },
       },
       metadata: { bookingId: bookingRef.id, lidoId, spotId },
-      success_url: `${origin}/prenotazione-confermata?booking=${bookingRef.id}`,
-      cancel_url: `${origin}/prenotazione-annullata?booking=${bookingRef.id}`,
+      // L'app è una SPA a singola pagina senza router: il "ritorno"
+      // da Stripe atterra sulla root con dei query param, letti da
+      // App.jsx al mount (vedi handleBookingRedirectResult).
+      success_url: `${origin}/?esito=confermata&booking=${bookingRef.id}`,
+      cancel_url: `${origin}/?esito=annullata&booking=${bookingRef.id}`,
     });
 
     await bookingRef.update({ stripeCheckoutSessionId: session.id });
