@@ -1,10 +1,9 @@
 import { useState, useMemo } from "react";
 
 // ─── OMBRELLONE CON OMBRA REALE ─────────────────────────────────────
-export function OmbrelloneReal({spot,bookings,selected,onSelect,isGestore,onGestoreClick,sunAlt,sunAz,delay=0}) {
+export function OmbrelloneReal({spot,selected,onSelect,isGestore,onGestoreClick,sunAlt,sunAz,delay=0}) {
   const [hov,setHov]=useState(false);
-  const booked=bookings.find(b=>b.spotId===spot.id);
-  const occ=!!booked||spot.status==="occupied"||spot.status==="reserved";
+  const occ=spot.status==="occupied"||spot.status==="reserved";
   const sel=selected?.id===spot.id;
   const cTop=occ?"#BDC3C7":sel?"#FF6B35":"#2ECC71";
   const cBot=occ?"#95A5A6":sel?"#CC4000":"#1A8A4A";
@@ -32,7 +31,7 @@ export function OmbrelloneReal({spot,bookings,selected,onSelect,isGestore,onGest
 
   return (
     <div
-      onClick={()=>{if(occ&&isGestore){onGestoreClick?.(spot,booked);return;}if(!occ)onSelect(spot);}}
+      onClick={()=>{if(occ&&isGestore){onGestoreClick?.(spot);return;}if(!occ)onSelect(spot);}}
       onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}
       title={occ?"Occupato":spot.id+" | €"+spot.price+"/g"+(spot.vip?" VIP":"")}
       style={{width:68,height:88,cursor:occ?(isGestore?"pointer":"default"):"pointer",

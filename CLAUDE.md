@@ -8,12 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stato del progetto — leggere prima di modificare
 
-Questo è un **prototipo con autenticazione reale e pagamento reale scritto (Stripe Connect), ma non ancora deployato — e con un gap noto tra la UI e Firestore**. Build pulita, UI completa. Stato attuale:
+Questo è un **prototipo con autenticazione reale, pagamento reale (Stripe Connect) e UI collegata a Firestore in tempo reale — ma non ancora deployato**. Build pulita. Stato attuale:
 
 1. **Autenticazione reale (Firebase Auth).** `src/firebase.js` inizializza l'app (config da `VITE_FIREBASE_*`, vedi `.env.example`). `StaffLoginModal` + `handleStaffLogin` in `App.jsx` fanno `signInWithEmailAndPassword` vero; il ruolo (gestore di un lido specifico, o admin) è deciso leggendo i custom claim (`admin`, `gestoreLidoId`) dal token. I clienti (senza account) vengono autenticati in modo anonimo all'avvio (`signInAnonymously`) solo per avere un uid stabile a cui agganciare una prenotazione — non esiste ancora un vero flusso di registrazione cliente. **Non esiste ancora nessun account staff**: va creato in Firebase Console (Authentication → Add user), poi gli va assegnato il claim con `node scripts/setStaffClaim.mjs --email ... --admin` (o `--gestore <lidoId>`).
-2. **Il pagamento è reale, non più il form finto.** `ModalPagamento.jsx` è stato rimosso. Il bottone "Paga" in `WizardPrenotazione` chiama `createCheckoutSession` (Cloud Function) e reindirizza a Stripe Checkout — il numero di carta non tocca mai il nostro frontend. Il "ritorno" da Stripe atterra sulla root dell'app con `?esito=confermata|annullata&booking=...` (letto da `App.jsx` al mount, niente router: vedi sotto).
-3. **Cloud Functions Stripe Connect scritte e verificate nell'emulatore** (`functions/`): `createConnectOnboardingLink`, `createCheckoutSession`, `stripeWebhook`. **Non ancora deployate** — serve `firebase login` di chi ha accesso al progetto, poi impostare i secret (vedi sotto) e `firebase deploy --only functions`.
-4. **Gap noto, prossimo da chiudere: la UI (Mappa/Home/AdminPanel) non legge ancora Firestore.** `App.jsx` genera ancora `spots` localmente con `generateSpots()` e tiene `bookings` in `useState` — la Checkout Session creata dal backend verifica/riserva il posto *in Firestore* (che ha i suoi documenti, seminati con `scripts/seedLidi.mjs`), ma la griglia che l'utente vede in schermo non si aggiorna in automatico quando un posto viene occupato da un'altra prenotazione. Finché questo non è collegato, il flusso di pagamento è reale ma l'app non riflette la disponibilità reale in tempo reale.
+2. **Il pagamento è reale, non più il form finto.** `ModalPagamento.jsx` è stato rimosso. Il bottone "Paga" in `WizardPrenotazione` chiama `createCheckoutSession` (Cloud Function) e reindirizza a Stripe Checkout — il numero di carta non tocca mai il nostro frontend. Il "ritorno" da Stripe atterra sulla root dell'app con `?esito=confermata|annullata&booking=...` (letto da `App.jsx` al mount, niente router).
+3. **Cloud Functions Stripe Connect scritte e verificate nell'emulatore** (`functions/`): `createConnectOnboardingLink`, `createCheckoutSession`, `stripeWebhook`. `createCheckoutSession` riserva il posto e crea la prenotazione dentro una `db.runTransaction` (evita che due checkout quasi simultanei sullo stesso posto passino entrambi il controllo "libero"), con rollback a "free" se la chiamata a Stripe fallisce dopo. **Non ancora deployate** — serve `firebase login` di chi ha accesso al progetto, poi impostare i secret (vedi sotto) e `firebase deploy --only functions`.
+4. **La UI (Mappa in WizardPrenotazione e nel pannello gestore) ora legge Firestore in tempo reale** tramite l'hook `src/hooks/useLido.js` (`onSnapshot` su `/lidi/{lidoId}` e la sua sottocollezione `/spots`) — non più `generateSpots()`/`useState` locale. `Mappa`/`OmbrelloneReal` non prendono più un prop `bookings` finto: l'occupazione di un posto si legge solo da `spot.status` ("free"/"reserved"/"occupied"), scritto esclusivamente dalle Cloud Functions. **`AdminPanel` resta fuori da questo collegamento**: mostra ancora dati statici/finti (prenotazioni di esempio, conteggio lidi dalla lista locale) — è un cruscotto aggregato multi-lido, un lavoro a parte rispetto al collegamento per-lido già fatto.
 
 **Percentuale di commissione piattaforma: PLACEHOLDER non confermato.** `functions/checkout.js` ha `PLATFORM_FEE_PERCENT = 10` come valore di partenza — è una mia stima ragionevole per un marketplace di prenotazioni, non una cifra decisa con te. Da confermare o correggere prima del deploy in produzione.
 
@@ -50,19 +50,21 @@ Vite + React puro (nessun router, nessun state manager esterno). Struttura:
 
 ```
 src/
-  firebase.js               → inizializzazione Firebase (app, auth, db) da variabili d'ambiente VITE_FIREBASE_*
+  firebase.js               → inizializzazione Firebase (app, auth, db, functions) da variabili d'ambiente VITE_FIREBASE_*/VITE_STRIPE_PUBLISHABLE_KEY
   theme.js                 → palette colori (C) e keyframes/CSS globali (css), importati ovunque serva lo stile
   data/
-    lidi.js                → i 47 lidi (dati statici) + CITTA derivata
-    spots.js                → griglia posti (settori P/Q/R/S × file A-E × 6 colonne), generateSpots()
+    lidi.js                → i 47 lidi (dati statici, per la UI) + CITTA derivata — stessa fonte usata da scripts/seedLidi.mjs per popolare Firestore
+    spots.js                → griglia posti (settori P/Q/R/S × file A-E × 6 colonne), generateSpots() — usata solo dal seed script e da AdminPanel, non più dalla UI cliente/gestore
   lib/
     sunEngine.js            → getSunPos(dateStr, timeH): calcolo astronomico posizione solare, usato per proiettare le ombre
+  hooks/
+    useLido.js               → onSnapshot realtime su un lido + la sua sottocollezione spots (Firestore, non più stato locale)
   components/                → pezzi riusabili senza logica di navigazione propria
     Logo, Splash, SunCompass, OmbrelloneReal, Mappa, CardLido,
     StaffLoginModal (login Firebase Auth reale)
   screens/                    → schermate intere, montate da App.jsx in base allo stato `screen`
-    Home, DettaglioLido, WizardPrenotazione, AdminPanel
-  App.jsx                     → orchestratore: state machine a schermate (splash/home/dettaglio/prenota/gestore/admin), tutto lo state applicativo (bookings, spots, screen corrente), login/logout staff, chiamata a createCheckoutSession, lettura del ritorno da Stripe via query param
+    Home, DettaglioLido, WizardPrenotazione, AdminPanel (ancora dati finti, vedi sopra)
+  App.jsx                     → orchestratore: state machine a schermate (splash/home/dettaglio/prenota/gestore/admin), useLido per il lido "attivo" (cliente o gestore), login/logout staff, chiamata a createCheckoutSession, lettura del ritorno da Stripe via query param
 scripts/
   setStaffClaim.mjs          → utility locale one-shot per assegnare i custom claim (admin/gestoreLidoId) a un account Firebase Auth esistente, via firebase-admin + service account key locale (mai committata)
   seedLidi.mjs                → utility locale one-shot per scrivere i 47 lidi + la loro griglia posti su Firestore (stessa fonte dati di src/data/lidi.js), idempotente: non resetta lo status di uno spot già prenotato
@@ -79,17 +81,18 @@ functions/                    → Cloud Functions (Node 20, region europe-west1)
 
 **Il motore ombra è il differenziatore del prodotto.** `getSunPos` in `sunEngine.js` calcola altitudine/azimuth solare reali per le coordinate del Gargano; `OmbrelloneReal` usa quei valori per disegnare via SVG l'ombra proiettata di ogni ombrellone. È matematica astronomica verificata, non toccarla senza motivo — un refactor che la "semplifica" rischia di romperla silenziosamente (nessun test la copre).
 
-**`Mappa` è condiviso tra tre contesti**: vista cliente nel wizard di prenotazione, vista gestore (pannello proprietario lido), e implicitamente l'admin panel (che genera la propria griglia posti indipendente). Se cambi la logica di disponibilità dei posti, verifica tutti e tre gli usi.
+**`Mappa` legge sempre spot da Firestore via `useLido`**, sia nel wizard di prenotazione cliente sia nel pannello gestore — l'unica eccezione è `AdminPanel`, che genera ancora la propria griglia con `generateSpots()` per uno pseudo-cruscotto non collegato a nessun lido reale. Se cambi il modello di disponibilità dei posti (nuovo stato oltre free/reserved/occupied, nuovi campi), aggiorna `firestore.rules`, `functions/checkout.js`, `functions/webhook.js`, `scripts/seedLidi.mjs` e `useLido.js` insieme.
 
 ## Prossimi passi tecnici (in ordine — vedi anche la task list)
 
 1. ~~Rimuovere `DEMO_USERS` e il backdoor admin~~ — fatto.
 2. ~~Scaffold Cloud Functions Stripe Connect~~ — fatto, non ancora deployato.
-3. ~~Sostituire `ModalPagamento` con Stripe Checkout reale~~ — fatto lato codice, non ancora testabile end-to-end (funzioni non deployate, nessun lido ha completato l'onboarding Connect).
-4. **Deploy**: `firebase login` (di chi ha accesso al progetto) → `firebase functions:secrets:set STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` → `node scripts/seedLidi.mjs` (popola Firestore) → `firebase deploy --only functions,firestore:rules` → registrare l'URL di `stripeWebhook` su Stripe Dashboard (Sviluppatori → Webhook).
-5. **Collegare la UI a Firestore in tempo reale**: sostituire `generateSpots()`/`useState` in `App.jsx` con un listener Firestore (`onSnapshot`) su `/lidi/{lidoId}/spots`, così la mappa riflette gli status reali (free/reserved/occupied) invece dello stato locale. Vedi punto 4 dello "Stato del progetto" sopra.
+3. ~~Sostituire `ModalPagamento` con Stripe Checkout reale~~ — fatto lato codice.
+4. ~~Collegare Mappa/WizardPrenotazione/Gestore a Firestore in tempo reale~~ — fatto (`useLido.js`), `AdminPanel` escluso di proposito (vedi sopra).
+5. **Deploy**: `firebase login` (di chi ha accesso al progetto) → `firebase functions:secrets:set STRIPE_SECRET_KEY` e `STRIPE_WEBHOOK_SECRET` → `node scripts/seedLidi.mjs` (popola Firestore) → `firebase deploy --only functions,firestore:rules` → registrare l'URL di `stripeWebhook` su Stripe Dashboard (Sviluppatori → Webhook). Solo dopo questo passo il flusso di pagamento è testabile end-to-end.
 6. **Onboarding gestori**: UI nel pannello gestore che chiama `createConnectOnboardingLink` e mostra un lido come "pagamenti non ancora attivi" finché `stripeOnboardingComplete` non è vero.
-7. **Audit dei 47 lidi**: verificare che contatti/dati siano ancora corretti (il progetto era fermo da tempo).
-8. Redesign UI (direzione "Lido Minimal": bianco/sabbia/blu maiolica/terracotta, tipografia Manrope+DM Mono, pattern maiolica pugliese come dettaglio, non sfondo) — da fare dopo che booking+pagamento reali funzionano, non prima.
+7. **AdminPanel reale**: cruscotto multi-lido con dati veri (richiede una collectionGroup query su `spots` e una query su `bookings`, non affrontato in questo giro).
+8. **Audit dei 47 lidi**: verificare che contatti/dati siano ancora corretti (il progetto era fermo da tempo).
+9. Redesign UI (direzione "Lido Minimal": bianco/sabbia/blu maiolica/terracotta, tipografia Manrope+DM Mono, pattern maiolica pugliese come dettaglio, non sfondo) — da fare dopo che booking+pagamento reali funzionano, non prima.
 
 Confermare `PLATFORM_FEE_PERCENT` in `functions/checkout.js` prima del deploy in produzione (vedi sopra).

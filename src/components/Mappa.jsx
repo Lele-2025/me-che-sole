@@ -6,12 +6,12 @@ import { SunCompass } from "./SunCompass.jsx";
 import { OmbrelloneReal } from "./OmbrelloneReal.jsx";
 
 // ─── MAPPA CON OMBRE SOLARI ──────────────────────────────────────────
-export function Mappa({spots,selected,onSelect,bookings,lidoNome,isGestore,onGestoreClick,dateStr,timeHours}) {
+export function Mappa({spots,selected,onSelect,lidoNome,isGestore,onGestoreClick,dateStr,timeHours}) {
   const [previewT,setPreviewT]=useState(timeHours!=null?timeHours:10);
   useEffect(()=>{if(timeHours!=null)setPreviewT(timeHours);},[timeHours]);
 
   const sun=useMemo(()=>getSunPos(dateStr||new Date().toISOString().split("T")[0],previewT),[dateStr,previewT]);
-  const free=spots.filter(s=>!bookings.find(b=>b.spotId===s.id)&&s.status==="free").length;
+  const free=spots.filter(s=>s.status==="free").length;
   const occ=spots.length-free;
   const colFila={A:"#0066AA",B:"#1E96B0",C:"#1A8A4A",D:"#7CB342",E:"#F9A825"};
 
@@ -116,7 +116,7 @@ export function Mappa({spots,selected,onSelect,bookings,lidoNome,isGestore,onGes
                     <div key={settore} style={{display:"flex",alignItems:"center"}}>
                       <div style={{display:"flex",gap:3}}>
                         {rowSpots.map((spot,ci)=>(
-                          <OmbrelloneReal key={spot.id} spot={spot} bookings={bookings}
+                          <OmbrelloneReal key={spot.id} spot={spot}
                             selected={selected} onSelect={onSelect}
                             isGestore={isGestore} onGestoreClick={onGestoreClick}
                             sunAlt={sun.alt} sunAz={sun.az} delay={(rIdx*6+ci)*0.012}/>

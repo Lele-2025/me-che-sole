@@ -3,7 +3,7 @@ import { C, css } from "../theme.js";
 import { Mappa } from "../components/Mappa.jsx";
 
 // ─── WIZARD PRENOTAZIONE ────────────────────────────────────────────
-export function WizardPrenotazione({lidoSel,spots,bookings,onBook,onBack,bookingLoading,bookingErr}) {
+export function WizardPrenotazione({lidoSel,spots,spotsLoading,onBook,onBack,bookingLoading,bookingErr}) {
   const [passo,setPasso]=useState(1);
   const [dateStart,setDateStart]=useState("");
   const [dateEnd,setDateEnd]=useState("");
@@ -92,8 +92,12 @@ export function WizardPrenotazione({lidoSel,spots,bookings,onBook,onBack,booking
               </div>
               {selected&&<button onClick={()=>setSelected(null)} style={{background:"none",border:"none",color:"#ccc",fontSize:"1.2rem",cursor:"pointer"}}>✕</button>}
             </div>
-            <Mappa spots={spots} selected={selected} onSelect={setSelected} bookings={bookings}
-              lidoNome={lidoSel?.nome} isGestore={false} dateStr={dateStart} timeHours={timeH}/>
+            {spotsLoading?(
+              <div style={{textAlign:"center",padding:"2rem",color:C.muted,fontSize:"0.85rem"}}>Caricamento disponibilità…</div>
+            ):(
+              <Mappa spots={spots} selected={selected} onSelect={setSelected}
+                lidoNome={lidoSel?.nome} isGestore={false} dateStr={dateStart} timeHours={timeH}/>
+            )}
             <div style={{marginTop:"1.2rem",display:"flex",flexDirection:"column",gap:"0.6rem"}}>
               <BtnV label={selected?"Vai al riepilogo →":"Seleziona un ombrellone per continuare"} disabled={!selected} onClick={()=>selected&&setPasso(3)}/>
               <BtnI onClick={()=>setPasso(1)}/>

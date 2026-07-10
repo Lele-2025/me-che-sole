@@ -3,7 +3,7 @@ import { signInWithEmailAndPassword, signInAnonymously, signOut } from "firebase
 import { httpsCallable } from "firebase/functions";
 import { auth, functions } from "./firebase.js";
 import { css } from "./theme.js";
-import { generateSpots } from "./data/spots.js";
+import { useLido } from "./hooks/useLido.js";
 import { Splash } from "./components/Splash.jsx";
 import { Logo } from "./components/Logo.jsx";
 import { StaffLoginModal } from "./components/StaffLoginModal.jsx";
@@ -23,19 +23,17 @@ export default function App() {
   const [staffModal,setStaffModal]=useState(false);
   const [staffErr,setStaffErr]=useState("");
   const [staffLoading,setStaffLoading]=useState(false);
-  const [spots]=useState(generateSpots);
-  const [bookings,setBookings]=useState([
-    {spotId:"P-A1",client:"Laura M.",date:"2025-07-14",arrivalTime:"08:45",price:32,tipo:"Con Imprevisti"},
-    {spotId:"P-A3",client:"Marco R.",date:"2025-07-14",arrivalTime:"09:00",price:32,tipo:"Standard"},
-    {spotId:"Q-B2",client:"Giulia T.",date:"2025-07-14",arrivalTime:"10:00",price:26,tipo:"Standard"},
-    {spotId:"Q-A5",client:"Roberto F.",date:"2025-07-14",arrivalTime:"09:30",price:32,tipo:"Con Imprevisti"},
-    {spotId:"R-C3",client:"Ospite",date:"2025-07-14",arrivalTime:"11:00",price:20,tipo:"Standard"},
-    {spotId:"S-A2",client:"Elena C.",date:"2025-07-14",arrivalTime:"08:30",price:32,tipo:"Con Imprevisti"},
-  ]);
+  const [staffLidoId,setStaffLidoId]=useState(null);
   const [selected,setSelected]=useState(null);
   const [bookingLoading,setBookingLoading]=useState(false);
   const [bookingErr,setBookingErr]=useState("");
   const [successMsg,setSuccessMsg]=useState("");
+
+  // Un solo hook per entrambi gli usi (cliente in fase di prenotazione,
+  // gestore nel proprio pannello): solo una delle due schermate è
+  // montata alla volta, quindi basta un lidoId "attivo".
+  const activeLidoId = screen==="prenota" ? lidoSel?.id : screen==="gestore" ? staffLidoId : null;
+  const { lido: activeLido, spots, loading: spotsLoading } = useLido(activeLidoId);
 
   // Un cliente non ha (ancora) un account vero: lo autentichiamo in modo
   // anonimo così una prenotazione ha comunque un uid stabile a cui
@@ -72,7 +70,10 @@ export default function App() {
       const cred=await signInWithEmailAndPassword(auth,email,pass);
       const token=await cred.user.getIdTokenResult();
       if(token.claims.admin){ setStaffModal(false); setScreen("admin"); }
-      else if(token.claims.gestoreLidoId){ setStaffModal(false); setScreen("gestore"); }
+      else if(token.claims.gestoreLidoId){
+        setStaffLidoId(token.claims.gestoreLidoId);
+        setStaffModal(false); setScreen("gestore");
+      }
       else{ setStaffErr("Il tuo account non ha permessi di gestione."); await signOut(auth); }
     }catch(e){
       setStaffErr("Credenziali non valide.");
@@ -82,6 +83,7 @@ export default function App() {
   };
   const handleStaffLogout=async()=>{
     await signOut(auth);
+    setStaffLidoId(null);
     await signInAnonymously(auth).catch(()=>{});
     setScreen("home");
   };
@@ -110,7 +112,7 @@ export default function App() {
   if(screen==="admin") return <AdminPanel onExit={handleStaffLogout}/>;
   if(screen==="dettaglio"&&lidoDettaglio) return <DettaglioLido lido={lidoDettaglio} onBack={()=>setScreen("home")} onPrenota={l=>{setLidoSel(l);setScreen("prenota");}}/>;
   if(screen==="prenota"&&lidoSel) return (
-    <WizardPrenotazione lidoSel={lidoSel} spots={spots} bookings={bookings} onBack={()=>setScreen("dettaglio")}
+    <WizardPrenotazione lidoSel={lidoSel} spots={spots} spotsLoading={spotsLoading} onBack={()=>setScreen("dettaglio")}
       onBook={handleBook} bookingLoading={bookingLoading} bookingErr={bookingErr}/>
   );
 
@@ -127,11 +129,15 @@ export default function App() {
         </div>
       </nav>
       <div style={{maxWidth:980,margin:"0 auto",padding:"1.5rem clamp(0.8rem,4vw,2rem) 4rem"}}>
-        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"1.4rem",fontWeight:700,color:"#003A58",marginBottom:"1rem"}}>Pannello gestore — Lido Azzurro</div>
-        <Mappa spots={spots} selected={selected}
-          onSelect={s=>{const bk=bookings.find(b=>b.spotId===s.id);if(!bk)setSelected(s);}}
-          bookings={bookings} lidoNome="Lido Azzurro" isGestore={true}
-          dateStr={new Date().toISOString().split("T")[0]} timeHours={10}/>
+        <div style={{fontFamily:"'Cormorant Garamond',serif",fontSize:"1.4rem",fontWeight:700,color:"#003A58",marginBottom:"1rem"}}>Pannello gestore — {activeLido?.nome||"Caricamento…"}</div>
+        {spotsLoading?(
+          <div style={{textAlign:"center",padding:"2rem",color:"#6ABBC8",fontSize:"0.85rem"}}>Caricamento posti…</div>
+        ):(
+          <Mappa spots={spots} selected={selected}
+            onSelect={s=>{if(s.status==="free")setSelected(s);}}
+            lidoNome={activeLido?.nome} isGestore={true}
+            dateStr={new Date().toISOString().split("T")[0]} timeHours={10}/>
+        )}
       </div>
     </div>
   );
