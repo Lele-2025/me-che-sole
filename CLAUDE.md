@@ -48,6 +48,8 @@ npm run preview   # serve la build di produzione in locale
 
 Non ci sono test automatici né linter configurati.
 
+**Anteprima visiva senza server locale**: `.github/workflows/preview-pages.yml` builda e pubblica il solo frontend statico su GitHub Pages a ogni push su `main` (richiede di aver abilitato una volta Settings → Pages → Source: GitHub Actions sul repository). Utile per rivedere aspetto/navigazione da qualunque dispositivo — login staff, disponibilità posti realtime e pagamento non funzionano lì, perché dipendono da Firebase/Cloud Functions non deployati in quel contesto.
+
 ## Architettura
 
 Vite + React puro (nessun router, nessun state manager esterno). Struttura:
