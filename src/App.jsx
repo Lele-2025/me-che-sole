@@ -1,11 +1,11 @@
 import { useState } from "react";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { auth } from "./firebase.js";
 import { css } from "./theme.js";
 import { generateSpots } from "./data/spots.js";
-import { DEMO_USERS } from "./data/demoAuth.js";
 import { Splash } from "./components/Splash.jsx";
 import { Logo } from "./components/Logo.jsx";
-import { GestoreModal } from "./components/GestoreModal.jsx";
-import { AdminModal } from "./components/AdminModal.jsx";
+import { StaffLoginModal } from "./components/StaffLoginModal.jsx";
 import { ModalPagamento } from "./components/ModalPagamento.jsx";
 import { Mappa } from "./components/Mappa.jsx";
 import { Home } from "./screens/Home.jsx";
@@ -18,12 +18,9 @@ export default function App() {
   const [screen,setScreen]=useState("splash");
   const [lidoSel,setLidoSel]=useState(null);
   const [lidoDettaglio,setLidoDettaglio]=useState(null);
-  const [gestoreModal,setGestoreModal]=useState(false);
-  const [adminModal,setAdminModal]=useState(false);
-  const [adminTap,setAdminTap]=useState(0);
-  const [adminErr,setAdminErr]=useState("");
-  const [gestoreErr,setGestoreErr]=useState("");
-  const [gestoreLoading,setGestoreLoading]=useState(false);
+  const [staffModal,setStaffModal]=useState(false);
+  const [staffErr,setStaffErr]=useState("");
+  const [staffLoading,setStaffLoading]=useState(false);
   const [spots]=useState(generateSpots);
   const [bookings,setBookings]=useState([
     {spotId:"P-A1",client:"Laura M.",date:"2025-07-14",arrivalTime:"08:45",price:32,tipo:"Con Imprevisti"},
@@ -38,17 +35,26 @@ export default function App() {
   const [prenotazionePending,setPrenotazionePending]=useState(null);
   const [successMsg,setSuccessMsg]=useState("");
 
-  const handleAdminTap=()=>{const n=adminTap+1;setAdminTap(n);if(n>=5){setAdminModal(true);setAdminTap(0);}setTimeout(()=>setAdminTap(0),3000);};
-  const handleGestoreLogin=(email,pass)=>{
-    setGestoreLoading(true);
-    setTimeout(()=>{
-      const u=DEMO_USERS[email.toLowerCase()];
-      setGestoreLoading(false);
-      if(!u||u.password!==pass){setGestoreErr("Credenziali non valide.");return;}
-      setGestoreModal(false);setGestoreErr("");setScreen("gestore");
-    },600);
+  // Login staff (gestore o admin): il ruolo è deciso dai custom claim
+  // sul token Firebase Auth, assegnati solo via scripts/setStaffClaim.mjs
+  // o (in futuro) da una Cloud Function — mai hardcoded nel client.
+  const handleStaffLogin=async(email,pass)=>{
+    setStaffLoading(true);
+    setStaffErr("");
+    try{
+      const cred=await signInWithEmailAndPassword(auth,email,pass);
+      const token=await cred.user.getIdTokenResult();
+      if(token.claims.admin){ setStaffModal(false); setScreen("admin"); }
+      else if(token.claims.gestoreLidoId){ setStaffModal(false); setScreen("gestore"); }
+      else{ setStaffErr("Il tuo account non ha permessi di gestione."); await signOut(auth); }
+    }catch(e){
+      setStaffErr("Credenziali non valide.");
+    }finally{
+      setStaffLoading(false);
+    }
   };
-  const handleAdminLogin=(pass)=>{if(pass==="superadmin"){setAdminErr("");setAdminModal(false);setScreen("admin");}else setAdminErr("Password errata.");};
+  const handleStaffLogout=async()=>{ await signOut(auth); setScreen("home"); };
+
   const handleBook=(pren)=>{setPrenotazionePending(pren);setShowPayment(true);};
   const handleConferma=()=>{
     if(!prenotazionePending) return;
@@ -60,7 +66,7 @@ export default function App() {
   };
 
   if(screen==="splash") return <Splash onDone={()=>setScreen("home")}/>;
-  if(screen==="admin") return <AdminPanel onExit={()=>setScreen("home")}/>;
+  if(screen==="admin") return <AdminPanel onExit={handleStaffLogout}/>;
   if(screen==="dettaglio"&&lidoDettaglio) return <DettaglioLido lido={lidoDettaglio} onBack={()=>setScreen("home")} onPrenota={l=>{setLidoSel(l);setScreen("prenota");}}/>;
   if(screen==="prenota"&&lidoSel) return (
     <>
@@ -78,7 +84,7 @@ export default function App() {
         <Logo h={36}/>
         <div style={{display:"flex",gap:"0.5rem",alignItems:"center"}}>
           <span style={{fontSize:"0.7rem",color:"#007FA0",fontWeight:700,background:"rgba(41,182,206,0.1)",borderRadius:50,padding:"0.25rem 0.7rem"}}>🔑 Gestore</span>
-          <button onClick={()=>setScreen("home")} style={{background:"rgba(255,107,53,0.1)",border:"1.5px solid rgba(255,107,53,0.3)",color:"#FF6B35",borderRadius:50,padding:"0.38rem 0.9rem",fontSize:"0.76rem",fontWeight:700,cursor:"pointer"}}>Esci</button>
+          <button onClick={handleStaffLogout} style={{background:"rgba(255,107,53,0.1)",border:"1.5px solid rgba(255,107,53,0.3)",color:"#FF6B35",borderRadius:50,padding:"0.38rem 0.9rem",fontSize:"0.76rem",fontWeight:700,cursor:"pointer"}}>Esci</button>
         </div>
       </nav>
       <div style={{maxWidth:980,margin:"0 auto",padding:"1.5rem clamp(0.8rem,4vw,2rem) 4rem"}}>
@@ -96,9 +102,8 @@ export default function App() {
     <>
       <style>{css}</style>
       {successMsg&&<div style={{position:"fixed",top:14,left:"50%",transform:"translateX(-50%)",background:"linear-gradient(135deg,#27AE60,#1A8A4A)",color:"white",borderRadius:50,padding:"0.7rem 1.4rem",fontSize:"0.85rem",fontWeight:700,zIndex:200,boxShadow:"0 4px 20px rgba(39,174,96,0.5)",maxWidth:"90vw",textAlign:"center",whiteSpace:"nowrap"}}>{successMsg}</div>}
-      <Home onDettaglio={l=>{setLidoDettaglio(l);setScreen("dettaglio");}} onGestore={()=>setGestoreModal(true)} onAdminTap={handleAdminTap}/>
-      {gestoreModal&&<GestoreModal onLogin={handleGestoreLogin} onClose={()=>{setGestoreModal(false);setGestoreErr("");}} err={gestoreErr} loading={gestoreLoading}/>}
-      {adminModal&&<AdminModal onLogin={handleAdminLogin} onClose={()=>{setAdminModal(false);setAdminErr("");}} err={adminErr}/>}
+      <Home onDettaglio={l=>{setLidoDettaglio(l);setScreen("dettaglio");}} onGestore={()=>setStaffModal(true)}/>
+      {staffModal&&<StaffLoginModal onLogin={handleStaffLogin} onClose={()=>{setStaffModal(false);setStaffErr("");}} err={staffErr} loading={staffLoading}/>}
     </>
   );
 }

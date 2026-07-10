@@ -8,13 +8,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Stato del progetto — leggere prima di modificare
 
-Questo è un **prototipo funzionante ma non sicuro e non persistente**. Build pulita, UI completa, ma tre cose non sono ancora vere nonostante l'aspetto:
+Questo è un **prototipo funzionante, autenticazione reale, ma ancora senza persistenza e senza pagamento reale**. Build pulita, UI completa. Stato attuale:
 
-1. **Nessuna persistenza reale.** Tutto lo stato (prenotazioni, disponibilità posti) vive in `useState` dentro `App.jsx`. Un refresh del browser cancella tutto. La migrazione a Firestore è pianificata (vedi sotto) ma non ancora fatta.
-2. **L'autenticazione è finta.** `src/data/demoAuth.js` contiene `DEMO_USERS` con password in chiaro (`gestore@mare.it` / `admin`). L'accesso admin è un backdoor: 5 tap nascosti sul copyright della home, password hardcoded `"superadmin"` in `App.jsx` (`handleAdminLogin`). Nessuna di queste due cose deve mai arrivare a un utente reale.
-3. **Il pagamento è finto.** `src/components/ModalPagamento.jsx` raccoglie numero carta/scadenza/CVV in `useState` e "conferma" con un `setTimeout` — nessun addebito avviene davvero, nessun dato è tokenizzato. Va sostituito interamente prima di qualunque uso reale.
+1. **Nessuna persistenza reale.** Tutto lo stato di prenotazioni/disponibilità posti vive ancora in `useState` dentro `App.jsx`. Un refresh del browser cancella tutto. Le Firestore Security Rules esistono già (`firestore.rules`), ma niente nell'app le usa ancora: manca il collegamento a Firestore per leggere/scrivere `/lidi`, `/spots`, `/bookings`.
+2. **L'autenticazione è reale (Firebase Auth), non più finta.** `src/firebase.js` inizializza l'app Firebase (config da variabili d'ambiente `VITE_FIREBASE_*`, vedi `.env.example`). `StaffLoginModal` + `handleStaffLogin` in `App.jsx` fanno `signInWithEmailAndPassword` vero; il ruolo (gestore di un lido specifico, o admin) è deciso leggendo i custom claim (`admin`, `gestoreLidoId`) dal token dopo il login — non più hardcoded. **Non esiste ancora nessun account staff**: va creato in Firebase Console (Authentication → Add user) e poi gli va assegnato il claim con `node scripts/setStaffClaim.mjs --email ... --admin` (o `--gestore <lidoId>`), usando una service account key locale (mai committata). Vedi commento in testa allo script.
+3. **Il pagamento è ancora finto.** `src/components/ModalPagamento.jsx` raccoglie numero carta/scadenza/CVV in `useState` e "conferma" con un `setTimeout` — nessun addebito avviene davvero, nessun dato è tokenizzato. Va sostituito interamente con Stripe Checkout/Payment Element prima di qualunque uso reale (bloccato: serve la chiave segreta Stripe di test).
 
-Questi tre punti sono isolati ciascuno nel proprio file/funzione apposta, per rendere la sostituzione un cambio localizzato e non una caccia nel codice.
+Nota ambientale: in questo sandbox di sviluppo le chiamate a `identitytoolkit.googleapis.com` (Firebase Auth) vengono resettate dalla rete (stesso comportamento osservato per `fonts.googleapis.com`) — il codice gestisce l'errore correttamente (mostra "Credenziali non valide" invece di crashare), ma un login riuscito non è stato verificabile da qui. Va testato in locale o in un ambiente di deploy reale una volta creato il primo account staff.
 
 ## Decisioni di prodotto prese (non rimetterle in discussione senza nuove info)
 
@@ -43,19 +43,22 @@ Vite + React puro (nessun router, nessun state manager esterno). Struttura:
 
 ```
 src/
+  firebase.js               → inizializzazione Firebase (app, auth, db) da variabili d'ambiente VITE_FIREBASE_*
   theme.js                 → palette colori (C) e keyframes/CSS globali (css), importati ovunque serva lo stile
   data/
     lidi.js                → i 47 lidi (dati statici) + CITTA derivata
     spots.js                → griglia posti (settori P/Q/R/S × file A-E × 6 colonne), generateSpots()
-    demoAuth.js             → DEMO_USERS — placeholder insicuro, isolato apposta (vedi sopra)
   lib/
     sunEngine.js            → getSunPos(dateStr, timeH): calcolo astronomico posizione solare, usato per proiettare le ombre
   components/                → pezzi riusabili senza logica di navigazione propria
     Logo, Splash, SunCompass, OmbrelloneReal, Mappa, CardLido,
-    GestoreModal, AdminModal, ModalPagamento (placeholder, vedi sopra)
+    StaffLoginModal (login Firebase Auth reale), ModalPagamento (placeholder, vedi sopra)
   screens/                    → schermate intere, montate da App.jsx in base allo stato `screen`
     Home, DettaglioLido, WizardPrenotazione, AdminPanel
-  App.jsx                     → orchestratore: state machine a schermate (splash/home/dettaglio/prenota/gestore/admin), tutto lo state applicativo (bookings, spots, screen corrente)
+  App.jsx                     → orchestratore: state machine a schermate (splash/home/dettaglio/prenota/gestore/admin), tutto lo state applicativo (bookings, spots, screen corrente), login/logout staff
+scripts/
+  setStaffClaim.mjs          → utility locale one-shot per assegnare i custom claim (admin/gestoreLidoId) a un account Firebase Auth esistente, via firebase-admin + service account key locale (mai committata)
+firestore.rules              → regole di sicurezza Firestore (ruoli via custom claim, bookings mai scrivibili da client)
 ```
 
 **Il routing è uno state machine manuale in `App.jsx`**, non un router: `screen` è una stringa (`"splash" | "home" | "dettaglio" | "prenota" | "gestore" | "admin"`) e ogni valore fa da early-return con un componente diverso. Se aggiungi una schermata, segui lo stesso pattern invece di introdurre React Router per una sola aggiunta.
@@ -66,11 +69,11 @@ src/
 
 ## Prossimi passi tecnici (in ordine — vedi anche la task list)
 
-1. **Rimuovere `DEMO_USERS` e il backdoor admin**, sostituire con Firebase Auth (email/password per gestori, ruoli via custom claims per admin). Bloccato finché non esiste un progetto Firebase con config reale da inserire.
-2. **Rimuovere `ModalPagamento` così com'è**, ricostruire con Stripe Checkout/Payment Element. Il numero di carta non deve mai passare per lo `state` React — solo Stripe.js/Elements deve toccarlo.
-3. **Modello dati Firestore**: `/lidi/{lidoId}/spots/{spotId}` (status realtime) e `/bookings/{bookingId}`, con regole di sicurezza per ruolo (un gestore scrive solo sui propri spot).
-4. **Cloud Functions**: onboarding link Stripe Connect per gestore, creazione Checkout Session con `transfer_data` verso l'account collegato del lido, webhook di conferma che aggiorna Firestore.
+1. ~~Rimuovere `DEMO_USERS` e il backdoor admin~~ — fatto, vedi sopra.
+2. **Collegare l'app a Firestore per davvero**: sostituire gli `useState` di `spots`/`bookings` in `App.jsx` con letture/scritture reali su `/lidi/{lidoId}/spots` e `/bookings` (regole già pronte in `firestore.rules`).
+3. **Rimuovere `ModalPagamento` così com'è**, ricostruire con Stripe Checkout/Payment Element. Il numero di carta non deve mai passare per lo `state` React — solo Stripe.js/Elements deve toccarlo.
+4. **Cloud Functions**: onboarding link Stripe Connect per gestore, creazione Checkout Session con `transfer_data` verso l'account collegato del lido, webhook di conferma che scrive la prenotazione in Firestore (unico scrittore ammesso, vedi regole).
 5. **Audit dei 47 lidi**: verificare che contatti/dati siano ancora corretti (il progetto era fermo da tempo).
 6. Redesign UI (direzione "Lido Minimal": bianco/sabbia/blu maiolica/terracotta, tipografia Manrope+DM Mono, pattern maiolica pugliese come dettaglio, non sfondo) — da fare dopo che booking+pagamento reali funzionano, non prima.
 
-I punti 1-4 sono bloccati su input esterni che solo chi ha accesso agli account può fornire: config del progetto Firebase dedicato, e chiave segreta di test Stripe (con Connect abilitato).
+I punti 3-4 sono bloccati sulla chiave segreta Stripe di test (con Connect abilitato), che non ho ancora ricevuto.

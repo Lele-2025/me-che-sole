@@ -4,7 +4,7 @@ import { LIDI, CITTA } from "../data/lidi.js";
 import { Logo } from "../components/Logo.jsx";
 import { CardLido } from "../components/CardLido.jsx";
 
-export function Home({onDettaglio,onGestore,onAdminTap}) {
+export function Home({onDettaglio,onGestore}) {
   const [search,setSearch]=useState("");
   const [cittaSel,setCittaSel]=useState("");
   const [results,setResults]=useState([]);
@@ -87,7 +87,7 @@ export function Home({onDettaglio,onGestore,onAdminTap}) {
         </div>
       )}
       <div style={{textAlign:"center",paddingBottom:"2rem"}}>
-        <span onClick={onAdminTap} style={{fontSize:"0.6rem",color:"rgba(41,182,206,0.15)",cursor:"default",userSelect:"none"}}>© 2025 Me che sole</span>
+        <span style={{fontSize:"0.6rem",color:"rgba(41,182,206,0.15)",userSelect:"none"}}>© 2025 Me che sole</span>
       </div>
     </div>
   );
